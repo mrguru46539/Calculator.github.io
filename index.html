@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Enhanced Calculator</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#0f1724;
+      --accent:#06b6d4;
+      --key:#111827;
+      --key-operator:#f59e0b;
+      --text:#e6eef8;
+      --muted:#94a3b8;
+      --glass: rgba(255,255,255,0.03);
+      --success:#10b981;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,var(--bg),#071027 140%);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .calculator{
+      width:min(520px,98vw);
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:14px;
+      padding:16px;
+      box-shadow: 0 12px 40px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.03);
+      display:grid;
+      grid-template-columns: 1fr 220px;
+      gap:14px;
+    }
+
+    /* Left: calculator panel */
+    .panel{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .display{
+      height:88px;
+      background:var(--panel);
+      border-radius:10px;
+      padding:14px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      font-size:20px;
+      color:var(--muted);
+      box-shadow: inset 0 -6px 24px rgba(0,0,0,0.6);
+      overflow:hidden;
+    }
+    .expr{
+      font-size:13px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .value{
+      font-size:28px;
+      font-weight:700;
+      color:var(--text);
+      text-align:right;
+      word-break:break-all;
+    }
+
+    .keys{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:10px;
+    }
+
+    button.key{
+      background:var(--key);
+      border: none;
+      color:var(--text);
+      padding:14px;
+      border-radius:10px;
+      font-size:16px;
+      cursor:pointer;
+      user-select:none;
+      transition:transform 0.08s ease, box-shadow 0.08s ease, opacity .08s;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.5);
+    }
+    button.key:active{transform:translateY(1px) scale(0.998)}
+    button.key.operator{
+      background:linear-gradient(180deg,var(--key-operator), #d97706);
+      color:#071027;
+      font-weight:700;
+    }
+    button.key.action{
+      background:var(--glass);
+      color:var(--muted);
+      font-weight:600;
+    }
+    button.key.equals{
+      grid-column: 3 / 5;
+      background:linear-gradient(180deg,var(--accent), #0891b2);
+      color:white;
+      font-weight:700;
+      font-size:18px;
+    }
+    .wide{grid-column: 1 / 3}
+
+    /* Right: history + memory */
+    .side{
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      border-radius:10px;
+      padding:10px;
+      border: 1px solid rgba(255,255,255,0.03);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-height:220px;
+    }
+    .side h3{margin:0; font-size:13px; color:var(--muted)}
+    .history{
+      background:rgba(255,255,255,0.02);
+      padding:8px;
+      border-radius:8px;
+      flex:1;
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .hist-item{
+      font-size:13px;
+      color:var(--muted);
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      align-items:center;
+    }
+    .hist-item .res{color:var(--text); font-weight:600}
+    .memory{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .mem-value{font-weight:700; color:var(--muted)}
+    .mem-buttons{display:flex; gap:6px}
+    .mem-buttons button{padding:8px 10px; font-size:13px}
+
+    .controls{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-end;
+    }
+    .tiny{padding:6px 8px; font-size:13px}
+
+    /* small screens: stack */
+    @media (max-width:760px){
+      .calculator{grid-template-columns:1fr; width:98vw}
+      .side{order:2}
+    }
+  </style>
+</head>
+<body>
+  <main class="calculator" aria-label="Enhanced Calculator">
+    <section class="panel" aria-hidden="false">
+      <div class="display" role="status" aria-live="polite">
+        <div class="expr" id="exprDisplay">&nbsp;</div>
+        <div class="value" id="valueDisplay">0</div>
+      </div>
+
+      <div class="keys" role="group" aria-label="Calculator keys">
+        <button class="key action tiny" data-action="clear-entry" title="Clear Entry (CE)">CE</button>
+        <button class="key action tiny" data-action="clear" title="Clear (C)">C</button>
+        <button class="key action tiny" data-action="backspace" title="Backspace (Backspace)">⌫</button>
+        <button class="key operator" data-value="/" title="Divide">÷</button>
+
+        <button class="key action" data-action="memory-clear" title="MC">MC</button>
+        <button class="key action" data-action="memory-recall" title="MR">MR</button>
+        <button class="key action" data-action="memory-subtract" title="M-">M-</button>
+        <button class="key action" data-action="memory-add" title="M+">M+</button>
+
+        <button class="key" data-value="7">7</button>
+        <button class="key" data-value="8">8</button>
+        <button class="key" data-value="9">9</button>
+        <button class="key operator" data-value="*" title="Multiply">×</button>
+
+        <button class="key" data-value="4">4</button>
+        <button class="key" data-value="5">5</button>
+        <button class="key" data-value="6">6</button>
+        <button class="key operator" data-value="-" title="Minus">−</button>
+
+        <button class="key" data-value="1">1</button>
+        <button class="key" data-value="2">2</button>
+        <button class="key" data-value="3">3</button>
+        <button class="key operator" data-value="+" title="Plus">+</button>
+
+        <button class="key" data-value="0" class="wide">0</button>
+        <button class="key" data-value="." title="Decimal">.</button>
+        <button class="key action equals" data-action="calculate" title="Equals (Enter)">=</button>
+
+        <button class="key action wide" data-action="parentheses" title="Parentheses">( )</button>
+        <button class="key action" data-action="percent" title="Percent">%</button>
+        <button class="key action" data-action="negate" title="+/-">+/-</button>
+      </div>
+      <div class="controls" style="margin-top:4px">
+        <button class="key action tiny" id="copyBtn" title="Copy result">Copy</button>
+        <button class="key tiny" id="themeBtn" title="Toggle theme">Theme</button>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="History and memory">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>History</h3>
+        <button class="key tiny" id="clearHistory">Clear</button>
+      </div>
+      <div class="history" id="history"></div>
+
+      <div>
+        <h3>Memory</h3>
+        <div class="memory">
+          <div class="mem-value" id="memValue">M: 0</div>
+          <div class="mem-buttons">
+            <button class="key tiny" data-action="memory-recall">MR</button>
+            <button class="key tiny" data-action="memory-clear">MC</button>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script>
+    (function(){
+      // Elements
+      const exprDisplay = document.getElementById('exprDisplay');
+      const valueDisplay = document.getElementById('valueDisplay');
+      const keys = document.querySelectorAll('.key');
+      const historyEl = document.getElementById('history');
+      const memValueEl = document.getElementById('memValue');
+      const copyBtn = document.getElementById('copyBtn');
+      const themeBtn = document.getElementById('themeBtn');
+      const clearHistoryBtn = document.getElementById('clearHistory');
+
+      // State
+      let expr = '';          // expression string for evaluation
+      let mem = 0;            // memory register
+      let lastResult = null;  // last computed result
+
+      // Helpers
+      function isOperator(ch){ return ['+','-','*','/'].includes(ch); }
+
+      // Display helpers
+      function updateDisplays(){
+        exprDisplay.textContent = expr || '\u00A0'; // non-breaking space when empty
+        const displayValue = expr === '' ? '0' : expr;
+        // Try evaluate for preview (don't throw)
+        try{
+          const evalVal = evaluateExpression(expr);
+          valueDisplay.textContent = formatNumber(evalVal);
+          valueDisplay.style.color = 'var(--text)';
+        }catch(e){
+          valueDisplay.textContent = expr === '' ? '0' : 'Error';
+          valueDisplay.style.color = 'var(--muted)';
+        }
+        memValueEl.textContent = 'M: ' + formatNumber(mem);
+      }
+
+      function formatNumber(n){
+        if (n === null || n === undefined) return '0';
+        // show integers without trailing .0, limit long decimals
+        if (!Number.isFinite(n)) return String(n);
+        if (Number.isInteger(n)) return n.toLocaleString();
+        // round to 10 decimal places max to avoid long tails
+        return Number(n.toFixed(10)).toString();
+      }
+
+      // Validating & evaluating
+      function evaluateExpression(s){
+        if (!s || s.trim() === '') return 0;
+        // Reject invalid chars
+        if (!/^[0-9+\-*/().\s%]+$/.test(s)) throw new Error('Invalid chars');
+        // Convert percent: replace occurrences like "50%" -> "(50/100)"
+        // We'll transform percentages carefully: replace number% with (number/100)
+        s = s.replace(/(\d+(\.\d+)?)%/g, '($1/100)');
+        // Safety: avoid leading zeros issues are fine; use Function
+        const res = Function('"use strict"; return (' + s + ')')();
+        if (res === Infinity || res === -Infinity || Number.isNaN(res)) throw new Error('Math error');
+        return res;
+      }
+
+      // Editing helper: find last number token (index start)
+      function findLastNumberIndex(str){
+        // Matches last number which may include decimal point. Will pick up digits only.
+        const m = str.match(/(\d+(\.\d+)?)\s*$/);
+        if (!m) return null;
+        return { start: m.index, text: m[0] };
+      }
+
+      // Actions
+      function appendDigit(d){
+        // If last token was result (after equals) and user enters digit, start new expr
+        if (lastResult !== null && expr === String(lastResult)) {
+          expr = '';
+          lastResult = null;
+        }
+        expr += d;
+        updateDisplays();
+      }
+
+      function appendDot(){
+        const last = findLastNumberIndex(expr);
+        if (!last) {
+          // If nothing or ends with operator, start "0."
+          if (expr === '' || isOperator(expr.slice(-1)) || expr.slice(-1) === '(') {
+            expr += '0.';
+            updateDisplays();
+            return;
+          }
+        } else {
+          if (last.text.includes('.')) return; // prevent two dots
+        }
+        expr += '.';
+        updateDisplays();
+      }
+
+      function appendOperator(op){
+        if (expr === '' && op === '-') { // allow starting negative number
+          expr = '-';
+          updateDisplays();
+          return;
+        }
+        if (expr === '') return;
+        const lastChar = expr.slice(-1);
+        if (isOperator(lastChar)) {
+          // replace last operator with new one (except allow - after operator for negative)
+          if (op === '-' && lastChar !== '-') {
+            expr += op; // something like 5 * -3
+          } else {
+            expr = expr.slice(0, -1) + op;
+          }
+        } else {
+          expr += op;
+        }
+        lastResult = null;
+        updateDisplays();
+      }
+
+      function toggleParenthesis(){
+        // Simple approach: count open vs close. If open > close -> insert ')', else insert '('
+        const open = (expr.match(/\(/g) || []).length;
+        const close = (expr.match(/\)/g) || []).length;
+        const lastChar = expr.slice(-1);
+        if (open > close && (/\d|\)/).test(lastChar)) {
+          expr += ')';
+        } else {
+          // if last char is a number, insert * before '('
+          if (/\d|\)/.test(lastChar)) expr += '*(';
+          else expr += '(';
+        }
+        updateDisplays();
+      }
+
+      function applyPercent(){
+        // convert last number to number/100
+        const last = findLastNumberIndex(expr);
+        if (!last) return;
+        const num = last.text.trim();
+        const before = expr.slice(0, last.start);
+        expr = before + '(' + num + '/100)';
+        updateDisplays();
+      }
+
+      function negateLast(){
+        // toggle sign of last number
+        const last = findLastNumberIndex(expr);
+        if (!last) {
+          // if empty, start a negative sign
+          expr = expr === '' ? '-' : expr;
+          updateDisplays();
+          return;
+        }
+        const { start, text } = last;
+        const before = expr.slice(0, start);
+        // If there's a '-' directly before the number and it's part of a unary sign, remove it
+        if (before.endsWith('(-')) {
+          // case like "*( -5" represented as "*(-5" — remove unary minus by changing "(-5" -> "(5"
+          expr = before.slice(0, -2) + '(' + text + ')' ;
+        } else if (before.endsWith('-') && (before.length === 1 || isOperator(before[before.length-2]) || before[before.length-2] === '(')) {
+          // There's a unary minus directly before the number: remove it
+          expr = before.slice(0, -1) + text;
+        } else {
+          // insert unary minus: if before ends with digit or ')', we should multiply
+          if (before === '' || isOperator(before.slice(-1)) || before.slice(-1) === '(') {
+            expr = before + '-' + text;
+          } else {
+            // e.g., "5" -> "5*(-num)"
+            expr = before + '*(-' + text + ')';
+          }
+        }
+        updateDisplays();
+      }
+
+      function clearEntry(){
+        // remove last number or last token
+        if (expr === '') return;
+        // If ends with operator remove it
+        if (isOperator(expr.slice(-1)) || expr.slice(-1) === '(' || expr.slice(-1) === ')') {
+          expr = expr.slice(0, -1);
+          updateDisplays();
+          return;
+        }
+        const last = findLastNumberIndex(expr);
+        if (!last) {
+          expr = '';
+        } else {
+          expr = expr.slice(0, last.start);
+        }
+        updateDisplays();
+      }
+
+      function clearAll(){
+        expr = '';
+        lastResult = null;
+        updateDisplays();
+      }
+
+      function backspace(){
+        if (!expr) return;
+        expr = expr.slice(0, -1);
+        updateDisplays();
+      }
+
+      function calculate(){
+        try{
+          const res = evaluateExpression(expr);
+          addHistory(expr, res);
+          expr = String(res);
+          lastResult = res;
+          updateDisplays();
+        }catch(e){
+          valueDisplay.textContent = 'Error';
+          valueDisplay.style.color = 'tomato';
+          lastResult = null;
+        }
+      }
+
+      function addHistory(equation, result){
+        const item = document.createElement('div');
+        item.className = 'hist-item';
+        const left = document.createElement('div');
+        left.textContent = equation;
+        left.style.opacity = '0.9';
+        left.style.fontSize = '13px';
+        const right = document.createElement('div');
+        right.innerHTML = '<span style="color:var(--muted); font-size:12px;">=</span> <span class="res">' + formatNumber(result) + '</span>';
+        item.appendChild(left);
+        item.appendChild(right);
+        // click history to reuse
+        item.addEventListener('click', () => {
+          expr = equation;
+          updateDisplays();
+        });
+        historyEl.prepend(item);
+      }
+
+      // Memory functions
+      function memoryClear(){
+        mem = 0;
+        updateDisplays();
+      }
+      function memoryRecall(){
+        // if lastResult present and expr equals lastResult, start new? We'll just append mem if editing.
+        if (lastResult !== null && expr === String(lastResult)) expr = '';
+        // if need to insert multiply when previous token ends with digit or ')'
+        if (expr !== '' && (/\d|\)/).test(expr.slice(-1))) expr += '*';
+        expr += String(mem);
+        updateDisplays();
+      }
+      function memoryAdd(){
+        // add current displayed numeric value to memory
+        try{
+          const val = evaluateExpression(expr || String(lastResult || 0));
+          mem = mem + Number(val);
+          updateDisplays();
+        }catch(e){}
+      }
+      function memorySubtract(){
+        try{
+          const val = evaluateExpression(expr || String(lastResult || 0));
+          mem = mem - Number(val);
+          updateDisplays();
+        }catch(e){}
+      }
+
+      // Wire buttons
+      keys.forEach(key => {
+        key.addEventListener('click', () => {
+          const val = key.getAttribute('data-value');
+          const action = key.getAttribute('data-action');
+
+          if (action){
+            switch(action){
+              case 'clear-entry': clearEntry(); break;
+              case 'clear': clearAll(); break;
+              case 'backspace': backspace(); break;
+              case 'calculate': calculate(); break;
+              case 'parentheses': toggleParenthesis(); break;
+              case 'percent': applyPercent(); break;
+              case 'negate': negateLast(); break;
+              case 'memory-clear': memoryClear(); break;
+              case 'memory-recall': memoryRecall(); break;
+              case 'memory-add': memoryAdd(); break;
+              case 'memory-subtract': memorySubtract(); break;
+              default: break;
+            }
+            return;
+          }
+
+          if (val){
+            if (/\d/.test(val)) appendDigit(val);
+            else if (val === '.') appendDot();
+            else if (isOperator(val)) appendOperator(val);
+            updateDisplays();
+          }
+        });
+      });
+
+      // Keyboard support
+      window.addEventListener('keydown', (e) => {
+        const k = e.key;
+        if (k >= '0' && k <= '9'){ appendDigit(k); e.preventDefault(); return; }
+        if (k === '.') { appendDot(); e.preventDefault(); return; }
+        if (k === '+' || k === '-' || k === '*' || k === '/') { appendOperator(k); e.preventDefault(); return; }
+        if (k === 'Enter' || k === '=') { calculate(); e.preventDefault(); return; }
+        if (k === 'Backspace') { backspace(); e.preventDefault(); return; }
+        if (k === 'Escape') { clearAll(); e.preventDefault(); return; }
+        if (k === '%') { applyPercent(); e.preventDefault(); return; }
+        if (k === '(' || k === ')') { expr += k; updateDisplays(); e.preventDefault(); return; }
+      });
+
+      // Copy result
+      copyBtn.addEventListener('click', () => {
+        const text = valueDisplay.textContent;
+        navigator.clipboard?.writeText(text).then(() => {
+          copyBtn.textContent = 'Copied';
+          setTimeout(()=> copyBtn.textContent = 'Copy', 1200);
+        }).catch(()=> {
+          copyBtn.textContent = 'Error';
+          setTimeout(()=> copyBtn.textContent = 'Copy', 1200);
+        });
+      });
+
+      // Theme toggle (simple invert)
+      let dark = true;
+      themeBtn.addEventListener('click', () => {
+        dark = !dark;
+        if (!dark){
+          document.documentElement.style.setProperty('--bg','#f3f4f6');
+          document.documentElement.style.setProperty('--panel','#ffffff');
+          document.documentElement.style.setProperty('--text','#061022');
+          document.documentElement.style.setProperty('--muted','#475569');
+          document.documentElement.style.setProperty('--key','#e6eef8');
+        }else{
+          document.documentElement.style.setProperty('--bg','#0b1220');
+          document.documentElement.style.setProperty('--panel','#0f1724');
+          document.documentElement.style.setProperty('--text','#e6eef8');
+          document.documentElement.style.setProperty('--muted','#94a3b8');
+          document.documentElement.style.setProperty('--key','#111827');
+        }
+      });
+
+      clearHistoryBtn.addEventListener('click', () => {
+        historyEl.innerHTML = '';
+      });
+
+      // Init
+      clearAll();
+    })();
+  </script>
+</body>
+</html>
